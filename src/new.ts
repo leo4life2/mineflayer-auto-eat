@@ -4,8 +4,9 @@ import { Bot } from 'mineflayer'
 import { Food as MdFood } from 'minecraft-data'
 import { StrictEventEmitter } from 'strict-event-emitter-types'
 
+// Modified to include 'auto' mode from old implementation
 type FoodSelection = MdFood | Item | number | string
-type FoodPriority = 'foodPoints' | 'saturation' | 'effectiveQuality' | 'saturationRatio'
+type FoodPriority = 'foodPoints' | 'saturation' | 'effectiveQuality' | 'saturationRatio' | 'auto'
 
 export interface IEatUtilOpts {
     priority: FoodPriority
@@ -16,6 +17,8 @@ export interface IEatUtilOpts {
     offhand: boolean
     eatingTimeout: number
     strictErrors: boolean
+    checkOnItemPickup: boolean
+    chatNotifications: boolean
 }
 
 export interface EatOpts {
@@ -37,9 +40,11 @@ const DefaultOpts: IEatUtilOpts = {
     minHunger: 15,
     returnToLastItem: true,
     offhand: false,
-    priority: 'foodPoints',
-    bannedFood: ['rotten_flesh', 'pufferfish', 'chorus_fruit', 'poisonous_potato', 'spider_eye'],
-    strictErrors: true
+    priority: 'auto', // Changed default to 'auto' to match old behavior
+    bannedFood: ['rotten_flesh', 'pufferfish', 'chorus_fruit', 'poisonous_potato', 'spider_eye', 'chicken', 'suspicious_stew'],
+    strictErrors: true,
+    checkOnItemPickup: true, // Added from old implementation
+    chatNotifications: true  // Added from old implementation
 }
 
 export interface EatUtilEvents {
@@ -54,6 +59,7 @@ export class EatUtil extends (EventEmitter as {
     public opts: IEatUtilOpts
     private _eating = false
     private _enabled = false
+    private _hasFood = true // Added from old implementation to track food availability
     private _rejectionBinding?: (error: Error) => void
 
     public get foods() {
@@ -75,14 +81,58 @@ export class EatUtil extends (EventEmitter as {
     public get enabled() {
         return this._enabled
     }
+    
+    public get hasFood() {
+        return this._hasFood
+    }
 
     constructor(private readonly bot: Bot, opts: Partial<IEatUtilOpts> = {}) {
         super()
         this.opts = Object.assign({}, DefaultOpts, opts) as IEatUtilOpts
+        
+        // Setup event listeners similar to old implementation
+        if (this.opts.checkOnItemPickup) {
+            this.bot.on('playerCollect', this.onPlayerCollect)
+        }
+        
+        this.bot.on('health', this.onHealthChange)
+        this.bot.on('spawn', this.onSpawn)
+        this.bot.on('death', this.onDeath)
+    }
+    
+    private onPlayerCollect = async (collector: any) => {
+        if (collector.username !== this.bot.username) return
+        // When player collects an item, assume there might be food
+        this._hasFood = true
+        await this.statusCheck()
+    }
+    
+    private onHealthChange = async () => {
+        await this.statusCheck()
+    }
+    
+    private onSpawn = () => {
+        this._eating = false
+        this._hasFood = true
+    }
+    
+    private onDeath = () => {
+        this._eating = false
     }
 
     public setOpts(opts: Partial<IEatUtilOpts>) {
+        const oldCheckOnItemPickup = this.opts.checkOnItemPickup
+        
         Object.assign(this.opts, opts)
+        
+        // Update event listeners if checkOnItemPickup option changed
+        if (oldCheckOnItemPickup !== this.opts.checkOnItemPickup) {
+            if (this.opts.checkOnItemPickup) {
+                this.bot.on('playerCollect', this.onPlayerCollect)
+            } else {
+                this.bot.off('playerCollect', this.onPlayerCollect)
+            }
+        }
     }
 
     public cancelEat() {
@@ -98,10 +148,50 @@ export class EatUtil extends (EventEmitter as {
      * @returns Optimal item.
      */
     public findBestChoices(items: Item[], priority: FoodPriority): Item[] {
-        return items
+        const filteredItems = items
             .filter((i) => i.name in this.foodsByName)
             .filter((i) => !this.opts.bannedFood.includes(i.name))
-            .sort((a, b) => this.foodsByName[b.name][priority] - this.foodsByName[a.name][priority])
+            
+        return filteredItems.sort((a, b) => {
+            // Handle 'auto' priority mode from old implementation
+            if (priority === 'auto') {
+                if (this.bot.health <= this.opts.minHealth) {
+                    return this.foodsByName[b.name].saturation - this.foodsByName[a.name].saturation
+                } else {
+                    return this.foodsByName[b.name].foodPoints - this.foodsByName[a.name].foodPoints
+                }
+            }
+            
+            return this.foodsByName[b.name][priority] - this.foodsByName[a.name][priority]
+        })
+    }
+    
+    /**
+     * Find the best food that minimizes wastage for the current hunger level
+     * @param choices Sorted food items
+     * @returns Best food item that minimizes wastage
+     */
+    private findFoodWithLeastWastage(choices: Item[]): Item {
+        if (choices.length === 0) return choices[0]
+        
+        // Get best choice from initial sort
+        let bestFood = choices[0]
+        
+        // For foodPoints priority or auto when health is good, minimize wastage
+        if (this.opts.priority === 'foodPoints' || 
+            (this.opts.priority === 'auto' && this.bot.health > this.opts.minHealth)) {
+            const neededPoints = 20 - this.bot.food
+            const bestFoodPoints = this.foodsByName[bestFood.name].foodPoints
+
+            for (const item of choices) {
+                const points = this.foodsByName[item.name].foodPoints
+                if (Math.abs(points - neededPoints) < Math.abs(bestFoodPoints - neededPoints)) {
+                    bestFood = item
+                }
+            }
+        }
+        
+        return bestFood
     }
 
     /**
@@ -143,11 +233,20 @@ export class EatUtil extends (EventEmitter as {
         if (choice != null) opts.food = choice
         else {
             const allItems = this.bot.util.inv.getAllItems()
-            const choices = this.findBestChoices(allItems, opts.priority)
+            const choices = this.findBestChoices(allItems, opts.priority as FoodPriority)
 
-            if (choices.length == 0) return false
+            if (choices.length == 0) {
+                this._hasFood = false // Mark that we don't have food
+                
+                if (this.opts.chatNotifications) {
+                    this.bot.chat("I'm out of food!")
+                }
+                
+                return false
+            }
 
-            opts.food = choices[0]
+            // Choose the food that minimizes wastage
+            opts.food = this.findFoodWithLeastWastage(choices)
         }
 
         return true
@@ -170,7 +269,7 @@ export class EatUtil extends (EventEmitter as {
                 }
             }
 
-            const itemListener = (oldItem: Item | null, newItem: Item | null) => {
+            const itemListener = (slot: number, oldItem: Item | null, newItem: Item | null) => {
                 if (oldItem?.slot === relevantItem.slot && newItem?.type !== relevantItem.type) {
                     this.bot._client.off('entity_status', eatingListener)
                     this.bot.inventory.off('updateSlot', itemListener)
@@ -223,6 +322,9 @@ export class EatUtil extends (EventEmitter as {
                 throw new Error(`Failed to equip: ${opts.food.name}!\nItem: ${opts.food}`)
         }
 
+        // For compatibility with old implementation's events
+        this.bot.emit('autoeat_started', opts.food, opts.offhand ?? false)
+        
         // ! begin eating item
 
         // sanitize by deactivating beforehand
@@ -241,6 +343,7 @@ export class EatUtil extends (EventEmitter as {
             else console.error(e)
 
             this.emit('eatFail', e as Error)
+            this.bot.emit('autoeat_error', e as Error)
         } finally {
             if (opts.equipOldItem && switchedItems && currentItem)
                 this.bot.util.inv.customEquip(currentItem, wantedHand)
@@ -249,6 +352,9 @@ export class EatUtil extends (EventEmitter as {
 
             this._eating = false
             this.emit('eatFinish', opts)
+            
+            // For compatibility with old implementation's events
+            this.bot.emit('autoeat_finished', opts.food, opts.offhand ?? false)
         }
     }
 
@@ -256,13 +362,15 @@ export class EatUtil extends (EventEmitter as {
      * Utility function to to eat whenever under health or hunger.
      */
     private statusCheck = async () => {
-        if (
-            this.bot.food < this.opts.minHunger ||
-            (this.bot.health < this.opts.minHealth && !this._eating)
-        ) {
+        // Skip checks if already eating or if we know there's no food
+        if (this._eating || !this._hasFood) return
+        
+        if (this.bot.food < this.opts.minHunger || this.bot.health < this.opts.minHealth) {
             try {
                 await this.eat()
-            } catch (e) {}
+            } catch (e) {
+                // Error is already emitted in eat() method
+            }
         }
     }
 
@@ -281,5 +389,14 @@ export class EatUtil extends (EventEmitter as {
         if (!this._enabled) return
         this._enabled = false
         this.bot.off('physicsTick', this.statusCheck)
+    }
+    
+    // Clean up event listeners when the plugin is unloaded
+    cleanup() {
+        this.disableAuto()
+        this.bot.off('playerCollect', this.onPlayerCollect)
+        this.bot.off('health', this.onHealthChange)
+        this.bot.off('spawn', this.onSpawn)
+        this.bot.off('death', this.onDeath)
     }
 }

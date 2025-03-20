@@ -1,239 +1,149 @@
-<h1 align="center">mineflayer-auto-eat</h1>
+# Mineflayer Auto Eat
 
-![npm](https://img.shields.io/npm/v/mineflayer-auto-eat)
-![npm bundle size](https://img.shields.io/bundlephobia/min/mineflayer-auto-eat)
-![GitHub](https://img.shields.io/github/license/link-discord/mineflayer-auto-eat?color=red)
+A comprehensive food management plugin for Mineflayer bots, with automatic eating capabilities.
 
-> A customizable and flexible auto-eat utility plugin for Mineflayer bots
+## Features
 
-## Table of Contents
+- **Auto-detect and eat food** when hunger or health is low
+- **Smart food selection** with multiple priority modes
+- **Offhand support** for eating
+- **Wastage minimization** to choose optimal food based on current hunger
+- **Flexible configuration** for banned foods, thresholds, and behavior
+- **Event driven** architecture with detailed events for custom handling
+- **Full TypeScript support** with type definitions
 
--   [Table of Contents](#table-of-contents)
--   [Install](#install)
--   [Example](#example)
--   [API](#api)
-    -   [Properties](#properties)
-        -   [bot.autoEat.enabled](#botautoeatenabled)
-        -   [bot.autoEat.isEating](#botautoeatiseating)
-        -   [bot.autoEat.opts](#botautoeatopts)
-        -   [bot.autoEat.foods](#botautoeatfoods)
-        -   [bot.autoEat.foodsArray](#botautoeatfoodsarray)
-        -   [bot.autoEat.foodsByName](#botautoeatfoodsbyname)
-    -   [Methods](#methods)
-        -   [bot.autoEat.setOpts(opts: Partial\<IEatUtilOpts\>)](#botautoeatsetoptsopts-partialieatutilopts)
-        -   [bot.autoEat.eat(opts: EatOptions)](#botautoeateatopts-eatoptions)
-        -   [bot.autoEat.enableAuto()](#botautoeatenableauto)
-        -   [bot.autoEat.disableAuto()](#botautoeatdisableauto)
-        -   [bot.autoEat.cancelEat()](#botautoeatcanceleat)
-    -   [Settings](#settings)
-        -   [IEatUtilOpts](#ieatutilopts)
-        -   [EatOpts](#eatopts)
-    -   [Events](#events)
--   [Authors](#authors)
--   [Show your support](#show-your-support)
+## Installation
 
-## Install
-
-```sh
+```bash
 npm install mineflayer-auto-eat
 ```
 
-> **Warning**: This package is ESM only and does not support CommonJS.
+## Basic Usage
 
-## Example
+```javascript
+const mineflayer = require('mineflayer')
+const autoEat = require('mineflayer-auto-eat')
 
-```js
-import { createBot } from 'mineflayer'
-import { loader as autoEat } from 'mineflayer-auto-eat'
-
-const bot = createBot({
-    host: process.argv[2] || 'localhost',
-    port: process.argv[3] || 25565,
-    username: process.argv[4] || 'bot',
-    auth: process.argv[5] || 'microsoft'
+const bot = mineflayer.createBot({
+  host: 'localhost',
+  username: 'Player',
 })
 
-bot.once('spawn', async () => {
-    bot.loadPlugin(autoEat)
-    bot.autoEat.enableAuto()
+// Load the plugin
+bot.loadPlugin(autoEat)
 
-    bot.autoEat.on('eatStart', (opts) => {
-        console.log(`Started eating ${opts.food.name} in ${opts.offhand ? 'offhand' : 'hand'}`)
-    })
-
-    bot.autoEat.on('eatFinish', (opts) => {
-        console.log(`Finished eating ${opts.food.name}`)
-    })
-
-    bot.autoEat.on('eatFail', (error) => {
-        console.error('Eating failed:', error)
-    })
-})
-```
-
-Run this with `node <file>.js [host] [port] [username] [auth]`.
-
-## API
-
-### Properties
-
-#### bot.autoEat.enabled
-
-Boolean value indicating whether the auto-eat utility is enabled or disabled.
-
-#### bot.autoEat.isEating
-
-Boolean value indicating whether the bot is currently eating or not. This value should not be manually set.
-
-#### bot.autoEat.opts
-
-This object holds the configurable options for the auto-eat utility.
-
-```js
-{
-  priority: "foodPoints",
-  minHunger: 15,
-  minHealth: 14,
-  returnToLastItem: true,
-  offhand: false,
-  eatingTimeout: 3000,
-  bannedFood: ["rotten_flesh", "pufferfish", "chorus_fruit", "poisonous_potato", "spider_eye"],
-  strictErrors: true
-}
-```
-
-#### bot.autoEat.foods
-
-Returns the `foods` registry from the bot, which contains all food-related information from the Minecraft data.
-
-#### bot.autoEat.foodsArray
-
-Returns an array of all available foods in Minecraft from the bot's registry.
-
-#### bot.autoEat.foodsByName
-
-Returns an object mapping food item names to their properties (e.g., saturation, foodPoints).
-
-### Methods
-
-#### bot.autoEat.setOpts(opts: Partial\<IEatUtilOpts\>)
-
-Allows you to modify the configuration options for the auto-eat utility dynamically.
-
-```js
-bot.autoEat.setOpts({
-    minHunger: 10,
-    priority: 'saturation'
-})
-```
-
-#### bot.autoEat.eat(opts: EatOptions)
-
-Manually triggers the eating function. If options are not provided, it will automatically pick the best food based on the current options.
-
-```js
-bot.autoEat
-    .eat({
-        food: 'apple', // optional
-        offhand: true, // optional
-        equipOldItem: false, // optional
-        priority: 'saturation' // optional
-    })
-    .then(() => {
-        console.log('Successfully ate the food!')
-    })
-    .catch((err) => {
-        console.error('Failed to eat:', err)
-    })
-```
-
-#### bot.autoEat.enableAuto()
-
-Enables automatic eating based on the bot's hunger and health levels. The bot will automatically check if it needs to eat during each `physicsTick`.
-
-```js
-bot.autoEat.enableAuto()
-```
-
-#### bot.autoEat.disableAuto()
-
-Disables the automatic eating functionality.
-
-```js
+// The plugin is enabled by default
+// You can disable and re-enable as needed
 bot.autoEat.disableAuto()
+bot.autoEat.enableAuto()
+
+// Listen to eating events
+bot.on('autoeat_started', (item, offhand) => {
+  console.log(`Started eating ${item.name} (offhand: ${offhand})`)
+})
+
+bot.on('autoeat_finished', (item, offhand) => {
+  console.log(`Finished eating ${item.name}`)
+})
+
+bot.on('autoeat_error', (error) => {
+  console.error(`Error while eating: ${error.message}`)
+})
+
+// Configure the plugin
+bot.autoEat.setOpts({
+  priority: 'foodPoints',  // 'foodPoints', 'saturation', 'effectiveQuality', 'saturationRatio', or 'auto'
+  minHunger: 14,           // Eat when hunger reaches this level
+  minHealth: 16,           // Use saturation-focused foods when health is below this level
+  bannedFood: ['rotten_flesh', 'poisonous_potato']  // Foods to never eat
+})
+
+// Manually trigger eating
+bot.autoEat.eat()
+  .then(() => console.log('Finished eating'))
+  .catch(err => console.error('Failed to eat:', err))
 ```
 
-#### bot.autoEat.cancelEat()
+## Configuration Options
 
-Cancels the current eating action if the bot is in the process of eating.
+You can configure the plugin using `bot.autoEat.setOpts(options)` with these options:
 
-```js
-bot.autoEat.cancelEat()
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `priority` | string | `'auto'` | Food selection priority strategy ('foodPoints', 'saturation', 'effectiveQuality', 'saturationRatio', or 'auto') |
+| `minHunger` | number | `15` | Minimum hunger level before eating |
+| `minHealth` | number | `14` | Health threshold for prioritizing food with high saturation |
+| `bannedFood` | string[] | `[...]` | Array of food item names to never eat |
+| `returnToLastItem` | boolean | `true` | Re-equip previous item after eating |
+| `offhand` | boolean | `false` | Use offhand for eating |
+| `eatingTimeout` | number | `3000` | Milliseconds to wait before timing out an eating attempt |
+| `strictErrors` | boolean | `true` | Whether to throw errors or just log them |
+| `checkOnItemPickup` | boolean | `true` | Check if food should be eaten when picking up items |
+| `chatNotifications` | boolean | `true` | Send chat messages when out of food |
+
+## Advanced Usage
+
+### Manual Eating with Options
+
+```javascript
+bot.autoEat.eat({
+  food: 'cooked_beef',    // Item name, Item object, or foodId
+  offhand: false,         // Whether to use offhand
+  equipOldItem: true,     // Return to previous item after eating
+  priority: 'saturation'  // Override default priority for this eat operation
+})
 ```
 
-### Settings
+### Customizing Events
 
-#### IEatUtilOpts
-
-These options define how the `EatUtil` behaves:
-
--   **priority** (`FoodPriority`): Defines the priority for choosing food. Acceptable values are `"foodPoints"`, `"saturation"`, `"effectiveQuality"`, and `"saturationRatio"`. Default is `"foodPoints"`.
--   **minHunger** (`number`): If the bot's hunger is less than or equal to this value, the bot will attempt to eat. Default is `15`.
--   **minHealth** (`number`): If the bot's health is less than or equal to this value, the bot will prioritize eating food with higher saturation. Default is `14`.
--   **bannedFood** (`string[]`): An array of food names that the bot is not allowed to eat. Default includes `"rotten_flesh"`, `"pufferfish"`, `"chorus_fruit"`, `"poisonous_potato"`, `"spider_eye"`.
--   **returnToLastItem** (`boolean`): If `true`, the bot will re-equip the previous item after eating. Default is `true`.
--   **offhand** (`boolean`): If `true`, the bot will use the offhand to eat. Default is `false`.
--   **eatingTimeout** (`number`): The timeout (in milliseconds) for completing the eating action. Default is `3000`.
--   **strictErrors** (`boolean`): If `true`, errors during the eating process will be thrown. Otherwise, they will be logged to the console. Default is `true`.
-
-#### EatOpts
-
-These options are provided to the `eat` method to override default behavior.:
-
--   **food** (`FoodSelection`): The food item to eat. If not provided, the bot will automatically choose the best food based on the current options.
--   **offhand** (`boolean`): If `true`, the bot will use the offhand to eat. Default is `false`.
--   **equipOldItem** (`boolean`): If `true`, the bot will re-equip the previous item after eating. Default is `true`.
--   **priority** (`FoodPriority`): Defines the priority for choosing food. Acceptable values are `"foodPoints"`, `"saturation"`, `"effectiveQuality"`, and `"saturationRatio"`. Default is `"foodPoints"`.
-
-### Events
-
--   **eatStart**: Emitted when the bot starts eating an item.
-
-```js
+```javascript
+// Using the new EventEmitter API
 bot.autoEat.on('eatStart', (opts) => {
-    console.log(`Started eating ${opts.food.name}`)
+  console.log(`Starting to eat ${opts.food.name}`)
 })
-```
 
--   **eatFinish**: Emitted when the bot finishes eating.
-
-```js
 bot.autoEat.on('eatFinish', (opts) => {
-    console.log(`Finished eating ${opts.food.name}`)
+  console.log(`Finished eating ${opts.food.name}`)
 })
-```
 
--   **eatFail**: Emitted when the bot fails to eat due to an error.
-
-```js
 bot.autoEat.on('eatFail', (error) => {
-    console.error('Eating failed:', error)
+  console.error(`Eating failed: ${error.message}`)
 })
 ```
 
-## Authors
+## Migration from v4.x to v5.x
 
-👤 **Rocco A**
+This plugin has been completely rewritten for v5.0, with major architectural improvements while maintaining backward compatibility.
 
--   Github: https://github.com/GenerelSchwerz
+### Important Changes
 
-👤 **Link**
+1. **Class-based architecture**: Now uses `EatUtil` class instead of attaching methods directly
+2. **More robust event handling**: Both old and new event systems are supported
+3. **Better typing**: Full TypeScript support with detailed interfaces
+4. **Additional priority modes**: Added 'effectiveQuality' and 'saturationRatio' options
+5. **Improved offhand support**: Better handling of offhand eating
+6. **Smarter food selection**: Enhanced algorithms for choosing the best food
 
--   Github: https://github.com/link-discord
--   Twitter: https://twitter.com/link0069
--   Website: https://linkdiscord.xyz/
--   Discord: @link0069
+### Backwards Compatibility
 
-## Show your support
+- All v4.x methods still work through compatibility layers
+- Old events are still emitted alongside new typed events
+- Configuration options are preserved with the same defaults
 
-Give a ⭐️ if this plugin helped you!
+## Advanced Features
+
+### Food Wastage Minimization
+
+The plugin can intelligently select food to minimize wastage, choosing food items that will fill your hunger bar efficiently rather than using high-value foods when not needed.
+
+### Auto Priority Mode
+
+When using `'auto'` priority (default), the plugin switches between:
+- `foodPoints` optimization when health is good (above `minHealth`)
+- `saturation` optimization when health is low (below `minHealth`)
+
+This ensures optimal healing and hunger management depending on your bot's situation.
+
+## License
+
+MIT
