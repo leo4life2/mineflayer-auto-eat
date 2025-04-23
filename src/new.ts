@@ -236,9 +236,11 @@ export class EatUtil extends (EventEmitter as {
             const choices = this.findBestChoices(allItems, opts.priority as FoodPriority)
 
             if (choices.length == 0) {
+                const wasPreviouslyTrue = this._hasFood; // Store current state
                 this._hasFood = false // Mark that we don't have food
-                
-                if (this.opts.chatNotifications) {
+
+                // Only notify if the state changed from having food to not having food
+                if (wasPreviouslyTrue && this.opts.chatNotifications) {
                     this.bot.chat("I'm out of food!")
                 }
                 
