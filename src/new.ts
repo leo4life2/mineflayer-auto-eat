@@ -61,6 +61,7 @@ export class EatUtil extends (EventEmitter as {
     private _enabled = false
     private _hasFood = true // Added from old implementation to track food availability
     private _rejectionBinding?: (error: Error) => void
+    private _lastOutOfFoodNotificationTime: number = 0 // Timestamp for cooldown
 
     public get foods() {
         return this.bot.registry.foods
@@ -236,12 +237,12 @@ export class EatUtil extends (EventEmitter as {
             const choices = this.findBestChoices(allItems, opts.priority as FoodPriority)
 
             if (choices.length == 0) {
-                const wasPreviouslyTrue = this._hasFood; // Store current state
                 this._hasFood = false // Mark that we don't have food
-
-                // Only notify if the state changed from having food to not having food
-                if (wasPreviouslyTrue && this.opts.chatNotifications) {
+                
+                const now = Date.now();
+                if (this.opts.chatNotifications && (now - this._lastOutOfFoodNotificationTime > 5000)) {
                     this.bot.chat("I'm out of food!")
+                    this._lastOutOfFoodNotificationTime = now;
                 }
                 
                 return false
