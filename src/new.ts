@@ -1,8 +1,8 @@
 import type { Item } from 'prismarine-item'
+import type { Bot } from 'mineflayer'
+import type { Food as MdFood } from 'minecraft-data'
+import type { StrictEventEmitter } from 'strict-event-emitter-types'
 import { EventEmitter } from 'events'
-import { Bot } from 'mineflayer'
-import { Food as MdFood } from 'minecraft-data'
-import { StrictEventEmitter } from 'strict-event-emitter-types'
 
 type FoodSelection = MdFood | Item | number | string
 type FoodPriority = 'foodPoints' | 'saturation' | 'effectiveQuality' | 'saturationRatio'
@@ -101,9 +101,9 @@ export class EatUtil extends (EventEmitter as {
         return items
             .filter((i) => i.name in this.foodsByName)
             .filter((i) => {
-                if (i.name === "fish" && i.metadata === 3) return false // 1.8 fix
+                if (i.name === 'fish' && i.metadata === 3) return false // 1.8 fix
                 return !this.opts.bannedFood.includes(i.name)
-              })
+            })
             .sort((a, b) => this.foodsByName[b.name][priority] - this.foodsByName[a.name][priority])
     }
 
@@ -114,15 +114,12 @@ export class EatUtil extends (EventEmitter as {
      * @returns The wanted item in bot's inventory, or nothing.
      */
     private normalizeFoodChoice(sel?: FoodSelection): Item | undefined {
-        if (sel == null) {
-            return undefined
-        } else if (typeof sel === 'string') {
+        if (sel == null) return undefined
+        else if (typeof sel === 'string')
             return this.bot.util.inv.getAllItems().find((i) => i.name === sel)
-        } else if (typeof sel === 'number') {
+        else if (typeof sel === 'number')
             return this.bot.util.inv.getAllItems().find((i) => i.type === sel)
-        } else if (typeof sel === 'object' && 'name' in sel && 'type' in sel) {
-            return sel as Item
-        }
+        else if (typeof sel === 'object' && 'name' in sel && 'type' in sel) return sel as Item
 
         const fsel = sel as MdFood
 
@@ -233,17 +230,16 @@ export class EatUtil extends (EventEmitter as {
 
         // trigger use state based on hand
         this.bot.activateItem(opts.offhand)
-
         this.emit('eatStart', opts)
 
         // Wait for eating to finish, handle errors gracefully if there are, and perform cleanup.
         try {
             await this.buildEatingListener(opts.food, this.opts.eatingTimeout)
-        } catch (e) {
-            if (this.opts.strictErrors) throw e // expose e to outer environment
-            else console.error(e)
+        } catch (error) {
+            if (this.opts.strictErrors) throw error // expose error to outer environment
+            else console.error(error)
 
-            this.emit('eatFail', e as Error)
+            this.emit('eatFail', error as Error)
         } finally {
             if (opts.equipOldItem && switchedItems && currentItem)
                 this.bot.util.inv.customEquip(currentItem, wantedHand)
@@ -255,25 +251,17 @@ export class EatUtil extends (EventEmitter as {
         }
     }
 
-    /**
-     * Utility function to to eat whenever under health or hunger.
-     */
     private statusCheck = async () => {
         if (
-            this.bot.food < this.opts.minHunger ||
-            (this.bot.health < this.opts.minHealth && !this._eating)
+            (this.bot.food < this.opts.minHunger || this.bot.health < this.opts.minHealth) &&
+            !this._eating
         ) {
             try {
                 await this.eat()
-            } catch (e) {}
+            } catch {}
         }
     }
 
-    /**
-     * Using timer to desync from physicsTick (attempt to work with mcproxy)
-     *
-     * Note: did not change anything.
-     */
     enableAuto() {
         if (this._enabled) return
         this._enabled = true
