@@ -151,56 +151,59 @@ export class EatUtil extends (EventEmitter as {
     public findBestChoices(items: Item[], priority: FoodPriority): Item[] {
         const filteredItems = items
             .filter((i) => i.name in this.foodsByName)
-<<<<<<< HEAD
-            .filter((i) => !this.opts.bannedFood.includes(i.name))
-            
+            .filter((i) => {
+                // 1.8 fix from upstream: exclude pufferfish item variant if surfaced as generic 'fish' with metadata 3
+                if (i.name === 'fish' && (i as any).metadata === 3) return false
+                return !this.opts.bannedFood.includes(i.name)
+            })
+
         return filteredItems.sort((a, b) => {
-            // Handle 'auto' priority mode from old implementation
+            // Support 'auto' mode: prioritize saturation when low health, otherwise food points
             if (priority === 'auto') {
                 if (this.bot.health <= this.opts.minHealth) {
-                    return this.foodsByName[b.name].saturation - this.foodsByName[a.name].saturation
-                } else {
-                    return this.foodsByName[b.name].foodPoints - this.foodsByName[a.name].foodPoints
+                    return (
+                        this.foodsByName[b.name].saturation - this.foodsByName[a.name].saturation
+                    )
                 }
+                return (
+                    this.foodsByName[b.name].foodPoints - this.foodsByName[a.name].foodPoints
+                )
             }
-            
+
             return this.foodsByName[b.name][priority] - this.foodsByName[a.name][priority]
         })
     }
-    
+
     /**
      * Find the best food that minimizes wastage for the current hunger level
      * @param choices Sorted food items
+     * @param priority Priority used to choose wastage strategy
      * @returns Best food item that minimizes wastage
      */
-    private findFoodWithLeastWastage(choices: Item[]): Item {
+    private findFoodWithLeastWastage(choices: Item[], priority: FoodPriority): Item {
+        // choices is guaranteed non-empty by caller; keep defensive return
         if (choices.length === 0) return choices[0]
-        
-        // Get best choice from initial sort
+
+        // Best from initial sort is our baseline
         let bestFood = choices[0]
-        
-        // For foodPoints priority or auto when health is good, minimize wastage
-        if (this.opts.priority === 'foodPoints' || 
-            (this.opts.priority === 'auto' && this.bot.health > this.opts.minHealth)) {
+
+        // When focusing on topping up hunger efficiently, pick closest foodPoints to needed amount.
+        // Apply when explicit 'foodPoints' priority or when 'auto' and health is good.
+        if (priority === 'foodPoints' || (priority === 'auto' && this.bot.health > this.opts.minHealth)) {
             const neededPoints = 20 - this.bot.food
-            const bestFoodPoints = this.foodsByName[bestFood.name].foodPoints
+            let bestDelta = Math.abs(this.foodsByName[bestFood.name].foodPoints - neededPoints)
 
             for (const item of choices) {
                 const points = this.foodsByName[item.name].foodPoints
-                if (Math.abs(points - neededPoints) < Math.abs(bestFoodPoints - neededPoints)) {
+                const delta = Math.abs(points - neededPoints)
+                if (delta < bestDelta) {
+                    bestDelta = delta
                     bestFood = item
                 }
             }
         }
-        
+
         return bestFood
-=======
-            .filter((i) => {
-                if (i.name === 'fish' && i.metadata === 3) return false // 1.8 fix
-                return !this.opts.bannedFood.includes(i.name)
-            })
-            .sort((a, b) => this.foodsByName[b.name][priority] - this.foodsByName[a.name][priority])
->>>>>>> upstream/main
     }
 
     /**
@@ -254,7 +257,7 @@ export class EatUtil extends (EventEmitter as {
             }
 
             // Choose the food that minimizes wastage
-            opts.food = this.findFoodWithLeastWastage(choices)
+            opts.food = this.findFoodWithLeastWastage(choices, opts.priority as FoodPriority)
         }
 
         return true
@@ -349,8 +352,8 @@ export class EatUtil extends (EventEmitter as {
             if (this.opts.strictErrors) throw error // expose error to outer environment
             else console.error(error)
 
-            this.emit('eatFail', e as Error)
-            this.bot.emit('autoeat_error', e as Error)
+            this.emit('eatFail', error as Error)
+            this.bot.emit('autoeat_error', error as Error)
         } finally {
             if (opts.equipOldItem && switchedItems && currentItem)
                 this.bot.util.inv.customEquip(currentItem, wantedHand)
