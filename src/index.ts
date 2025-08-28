@@ -1,4 +1,4 @@
-import { Bot } from 'mineflayer'
+import type { Bot } from 'mineflayer'
 import { EatUtil } from './new.js'
 import utilPlugin from '@nxg-org/mineflayer-util-plugin'
 import type { Item } from 'prismarine-item'
@@ -19,7 +19,10 @@ declare module 'mineflayer' {
 export { EatUtil } from './new.js'
 
 export function loader(bot: Bot) {
-    if (!bot.hasPlugin(utilPlugin.default)) bot.loadPlugin(utilPlugin.default)
+    const plugin = utilPlugin.default ?? utilPlugin
+
+    if (!bot.hasPlugin(plugin)) bot.loadPlugin(plugin)
+
     bot.autoEat = new EatUtil(bot)
     
     // Enable auto eating by default for backwards compatibility

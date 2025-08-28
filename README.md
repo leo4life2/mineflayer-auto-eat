@@ -1,20 +1,36 @@
-# Mineflayer Auto Eat
+<h1 align="center">mineflayer-auto-eat</h1>
 
-A comprehensive food management plugin for Mineflayer bots, with automatic eating capabilities.
+> A customizable and flexible auto-eat utility plugin for Mineflayer bots
 
-## Features
+## Table of Contents
 
-- **Auto-detect and eat food** when hunger or health is low
-- **Smart food selection** with multiple priority modes
-- **Offhand support** for eating
-- **Wastage minimization** to choose optimal food based on current hunger
-- **Flexible configuration** for banned foods, thresholds, and behavior
-- **Event driven** architecture with detailed events for custom handling
-- **Full TypeScript support** with type definitions
+-   [Table of Contents](#table-of-contents)
+-   [Install](#install)
+-   [Example](#example)
+-   [API](#api)
+    -   [Properties](#properties)
+        -   [bot.autoEat.enabled](#botautoeatenabled)
+        -   [bot.autoEat.isEating](#botautoeatiseating)
+        -   [bot.autoEat.opts](#botautoeatopts)
+        -   [bot.autoEat.foods](#botautoeatfoods)
+        -   [bot.autoEat.foodsArray](#botautoeatfoodsarray)
+        -   [bot.autoEat.foodsByName](#botautoeatfoodsbyname)
+    -   [Methods](#methods)
+        -   [bot.autoEat.setOpts(opts: Partial\<IEatUtilOpts\>)](#botautoeatsetoptsopts-partialieatutilopts)
+        -   [bot.autoEat.eat(opts: EatOptions)](#botautoeateatopts-eatoptions)
+        -   [bot.autoEat.enableAuto()](#botautoeatenableauto)
+        -   [bot.autoEat.disableAuto()](#botautoeatdisableauto)
+        -   [bot.autoEat.cancelEat()](#botautoeatcanceleat)
+    -   [Settings](#settings)
+        -   [IEatUtilOpts](#ieatutilopts)
+        -   [EatOpts](#eatopts)
+    -   [Events](#events)
+-   [Authors](#authors)
+-   [Show your support](#show-your-support)
 
-## Installation
+## Install
 
-```bash
+```sh
 npm install mineflayer-auto-eat
 ```
 
@@ -111,39 +127,16 @@ bot.autoEat.on('eatFail', (error) => {
 })
 ```
 
-## Migration from v4.x to v5.x
+## Authors
 
-This plugin has been completely rewritten for v5.0, with major architectural improvements while maintaining backward compatibility.
+👤 **Rocco A**
 
-### Important Changes
+https://github.com/GenerelSchwerz
 
-1. **Class-based architecture**: Now uses `EatUtil` class instead of attaching methods directly
-2. **More robust event handling**: Both old and new event systems are supported
-3. **Better typing**: Full TypeScript support with detailed interfaces
-4. **Additional priority modes**: Added 'effectiveQuality' and 'saturationRatio' options
-5. **Improved offhand support**: Better handling of offhand eating
-6. **Smarter food selection**: Enhanced algorithms for choosing the best food
+👤 **Linkle**
 
-### Backwards Compatibility
+https://github.com/linkle69
 
-- All v4.x methods still work through compatibility layers
-- Old events are still emitted alongside new typed events
-- Configuration options are preserved with the same defaults
+## Show your support
 
-## Advanced Features
-
-### Food Wastage Minimization
-
-The plugin can intelligently select food to minimize wastage, choosing food items that will fill your hunger bar efficiently rather than using high-value foods when not needed.
-
-### Auto Priority Mode
-
-When using `'auto'` priority (default), the plugin switches between:
-- `foodPoints` optimization when health is good (above `minHealth`)
-- `saturation` optimization when health is low (below `minHealth`)
-
-This ensures optimal healing and hunger management depending on your bot's situation.
-
-## License
-
-MIT
+Give a ⭐️ if this plugin helped you!
