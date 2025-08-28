@@ -349,12 +349,8 @@ export class EatUtil extends (EventEmitter as {
             if (this.opts.strictErrors) throw error // expose error to outer environment
             else console.error(error)
 
-<<<<<<< HEAD
             this.emit('eatFail', e as Error)
             this.bot.emit('autoeat_error', e as Error)
-=======
-            this.emit('eatFail', error as Error)
->>>>>>> upstream/main
         } finally {
             if (opts.equipOldItem && switchedItems && currentItem)
                 this.bot.util.inv.customEquip(currentItem, wantedHand)
@@ -370,7 +366,6 @@ export class EatUtil extends (EventEmitter as {
     }
 
     private statusCheck = async () => {
-<<<<<<< HEAD
         // Skip checks if already eating or if we know there's no food
         if (this._eating || !this._hasFood) return
         
@@ -380,15 +375,6 @@ export class EatUtil extends (EventEmitter as {
             } catch (e) {
                 // Error is already emitted in eat() method
             }
-=======
-        if (
-            (this.bot.food < this.opts.minHunger || this.bot.health < this.opts.minHealth) &&
-            !this._eating
-        ) {
-            try {
-                await this.eat()
-            } catch {}
->>>>>>> upstream/main
         }
     }
 
