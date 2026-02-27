@@ -7,6 +7,15 @@ import { EventEmitter } from 'events'
 // Modified to include 'auto' mode from old implementation
 type FoodSelection = MdFood | Item | number | string
 type FoodPriority = 'foodPoints' | 'saturation' | 'effectiveQuality' | 'saturationRatio' | 'auto'
+const RAW_FOOD_NAMES = new Set([
+    'beef',
+    'porkchop',
+    'mutton',
+    'rabbit',
+    'cod',
+    'salmon',
+    'chicken'
+])
 
 export interface IEatUtilOpts {
     priority: FoodPriority
@@ -174,6 +183,10 @@ export class EatUtil extends (EventEmitter as {
         })
     }
 
+    private isRawFood(name: string) {
+        return RAW_FOOD_NAMES.has(name)
+    }
+
     /**
      * Find the best food that minimizes wastage for the current hunger level
      * @param choices Sorted food items
@@ -184,22 +197,38 @@ export class EatUtil extends (EventEmitter as {
         // choices is guaranteed non-empty by caller; keep defensive return
         if (choices.length === 0) return choices[0]
 
-        // Best from initial sort is our baseline
+        const neededPoints = Math.max(1, 20 - this.bot.food)
+        const isLowHealth = this.bot.health <= this.opts.minHealth
+        const hasNonRawChoice = choices.some((item) => !this.isRawFood(item.name))
+
         let bestFood = choices[0]
+        let bestScore = Number.POSITIVE_INFINITY
 
-        // When focusing on topping up hunger efficiently, pick closest foodPoints to needed amount.
-        // Apply when explicit 'foodPoints' priority or when 'auto' and health is good.
-        if (priority === 'foodPoints' || (priority === 'auto' && this.bot.health > this.opts.minHealth)) {
-            const neededPoints = 20 - this.bot.food
-            let bestDelta = Math.abs(this.foodsByName[bestFood.name].foodPoints - neededPoints)
+        for (const item of choices) {
+            const foodStats = this.foodsByName[item.name]
+            const points = foodStats.foodPoints
+            const overshoot = Math.max(0, points - neededPoints)
+            const undershoot = Math.max(0, neededPoints - points)
+            const rawPenalty = hasNonRawChoice && this.isRawFood(item.name) ? 8 : 0
 
-            for (const item of choices) {
-                const points = this.foodsByName[item.name].foodPoints
-                const delta = Math.abs(points - neededPoints)
-                if (delta < bestDelta) {
-                    bestDelta = delta
-                    bestFood = item
-                }
+            // Heavily penalize overfilling hunger so the bot does not waste high-value food.
+            // Slightly penalize underfilling to avoid needing too many extra eat cycles.
+            let score = overshoot * 4 + undershoot * 1.2 + rawPenalty
+
+            // Extra penalty for "huge meals" when only a tiny refill is needed.
+            if (points >= neededPoints + 6) score += 6
+
+            // When health is low, bias toward better regen foods but still respect waste.
+            if (isLowHealth) score -= foodStats.saturation * 0.4
+
+            // Respect explicit non-auto priorities as a tie-breaker (lower is better score).
+            if (priority !== 'auto' && priority !== 'foodPoints') {
+                score -= foodStats[priority] * 0.25
+            }
+
+            if (score < bestScore) {
+                bestScore = score
+                bestFood = item
             }
         }
 
