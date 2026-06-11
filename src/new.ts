@@ -327,6 +327,10 @@ export class EatUtil extends (EventEmitter as {
             }
 
             setTimeout(() => {
+                // Detach before rejecting: a timed-out eat would otherwise leak
+                // both listeners permanently (off/rej are no-ops if already settled)
+                this.bot._client.off('entity_status', eatingListener)
+                this.bot.inventory.off('updateSlot', itemListener)
                 rej(new Error(`Eating timed out with a time of ${timeout} milliseconds!`))
             }, timeout)
         })
