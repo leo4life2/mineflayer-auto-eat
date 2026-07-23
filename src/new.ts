@@ -362,8 +362,14 @@ export class EatUtil extends (EventEmitter as {
             const equipped = await this.bot.util.inv.customEquip(opts.food, wantedHand)
 
             // if fail to equip, throw error.
-            if (!equipped)
+            if (!equipped) {
+                // Reset the eating latch BEFORE throwing: this throw happens
+                // outside the try/finally below, so without the reset a single
+                // failed equip left _eating=true forever and deadlocked the
+                // plugin until respawn (rig-reproduced 2026-07-23).
+                this._eating = false
                 throw new Error(`Failed to equip: ${opts.food.name}!\nItem: ${opts.food}`)
+            }
         }
 
         // For compatibility with old implementation's events
@@ -388,8 +394,13 @@ export class EatUtil extends (EventEmitter as {
             this.emit('eatFail', error as Error)
             this.bot.emit('autoeat_error', error as Error)
         } finally {
-            if (opts.equipOldItem && switchedItems && currentItem)
-                this.bot.util.inv.customEquip(currentItem, wantedHand)
+            if (opts.equipOldItem && switchedItems && currentItem) {
+                // AWAIT the hand restore so eatFinish/autoeat_finished truly
+                // mean "eat done, hand settled". Fire-and-forget here let
+                // finish listeners race a still-pending restore (and a failed
+                // restore vanished silently).
+                try { await this.bot.util.inv.customEquip(currentItem, wantedHand) } catch { /* hand restore is best-effort */ }
+            }
 
             delete this._rejectionBinding
 
@@ -401,16 +412,59 @@ export class EatUtil extends (EventEmitter as {
         }
     }
 
+    /**
+     * Can `item` be eaten RIGHT NOW, by the server's own rule? Vanilla (and
+     * every server that follows it, modded included) refuses use-item for
+     * ordinary food at full hunger; only foods flagged "can always eat"
+     * (golden apples etc., or any modded food that sets the flag) go through.
+     * Data ladder, no item-name lists:
+     *   1. hunger not full -> any registry food is consumable
+     *   2. registry food entry exposes an always-edible flag -> trust it
+     *      (minecraft-data does not ship one today; this picks it up the day
+     *      it does, and honors registries that inject it)
+     *   3. otherwise -> NOT provably consumable. Probed on 1.21.1: item
+     *      components are delta-encoded on the wire, so a default `food`
+     *      component (where canAlwaysEat lives) never appears on stacks —
+     *      when the data cannot prove the server will accept the eat, we do
+     *      not start one.
+     */
+    private canConsumeNow(name: string): boolean {
+        if (this.bot.food < 20) return true
+        const entry = this.foodsByName[name] as any
+        return entry != null && (entry.alwaysEdible === true || entry.canAlwaysEat === true)
+    }
+
     private statusCheck = async () => {
         // Skip checks if already eating or if we know there's no food
         if (this._eating || !this._hasFood) return
-        
-        if (this.bot.food < this.opts.minHunger || this.bot.health < this.opts.minHealth) {
-            try {
-                await this.eat()
-            } catch (e) {
-                // Error is already emitted in eat() method
-            }
+
+        const hungerLow = this.bot.food < this.opts.minHunger
+        const healthLow = this.bot.health < this.opts.minHealth
+        if (!hungerLow && !healthLow) return
+
+        // Mechanism guard (rig-reproduced 2026-07-23): a health-triggered eat
+        // at FULL hunger can never complete for ordinary food — the server
+        // silently refuses the use-item (the same rule mineflayer's own
+        // consume() enforces client-side), so the equip just parked food in
+        // the main hand for the whole eatingTimeout (3 s) on every health
+        // packet below minHealth, and the bot fought with a steak. Only start
+        // an eat the server can actually accept; at food=20 that means an
+        // always-edible item, chosen explicitly so the priority sort cannot
+        // pick a non-consumable.
+        let choice: Item | undefined
+        if (!hungerLow && this.bot.food >= 20) {
+            choice = this.bot.util.inv
+                .getAllItems()
+                .find((i) => i.name in this.foodsByName &&
+                    !this.opts.bannedFood.includes(i.name) &&
+                    this.canConsumeNow(i.name))
+            if (choice == null) return
+        }
+
+        try {
+            await this.eat(choice != null ? { food: choice } : {})
+        } catch (e) {
+            // Error is already emitted in eat() method
         }
     }
 
