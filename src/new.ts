@@ -134,7 +134,16 @@ export class EatUtil extends (EventEmitter as {
         const oldCheckOnItemPickup = this.opts.checkOnItemPickup
         
         Object.assign(this.opts, opts)
-        
+
+        // N4-R3 (2026-09-04, owner-owned fork): a NEW ban list invalidates the
+        // "no food aboard" conclusion. Without this the reflex slept until the
+        // next item pickup once sanitizeOpts had found no unbanned food — the
+        // n1j starvation trap (12 min at 0.5 HP / food 0 with rotten flesh
+        // aboard). The agent's eat policy (src/agent/library/modules/eatPolicy.js)
+        // recomputes bannedFood from the pocket, so every recompute re-arms the
+        // pocket check on the next status tick.
+        if (Array.isArray(opts.bannedFood)) this._hasFood = true
+
         // Update event listeners if checkOnItemPickup option changed
         if (oldCheckOnItemPickup !== this.opts.checkOnItemPickup) {
             if (this.opts.checkOnItemPickup) {
@@ -435,6 +444,12 @@ export class EatUtil extends (EventEmitter as {
     }
 
     private statusCheck = async () => {
+        // N4-R3 (2026-09-04, owner-owned fork): disableAuto() means NO automatic
+        // eating. The check used to ride every 'health' event (and item pickup)
+        // regardless of _enabled, so a paused reflex still bit the moment a
+        // hit landed — the exact melee window the agent's eat guard pauses it
+        // for (combat doctrine Part H; N2b modelled the plugin as gated).
+        if (!this._enabled) return
         // Skip checks if already eating or if we know there's no food
         if (this._eating || !this._hasFood) return
 
